@@ -1,7 +1,25 @@
 package org.example;
 
+import org.example.comission.CardCommissionStrategy;
+import org.example.comission.CashCommissionStrategy;
+import org.example.comission.CommissionFactory;
+import org.example.comission.CommissionStrategy;
+import org.example.comission.PaymentType;
+import org.example.comission.TransferCommissionStrategy;
+import org.example.discount.CustomerType;
+import org.example.discount.DiscountFactory;
+import org.example.discount.DiscountStrategy;
+import org.example.discount.PremiumDiscountStrategy;
+import org.example.discount.RegularDiscountStrategy;
+import org.example.discount.VipDiscountStrategy;
+import org.example.receipt.ReceiptService;
+import org.example.receipt.SampleReceiptService;
+import org.example.repository.OrderRepository;
+import org.example.repository.SampleOrderRepository;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  Контекст: Тебе достался в наследство код от предыдущего разработчика — сервис обработки заказов интернет-магазина OrderService.
@@ -14,71 +32,86 @@ Lombok использовать нельзя, все писать руками.
  */
 public class OrderService {
 
+    private final CommissionFactory commissionFactory;
+    private final DiscountFactory discountFactory;
+    private final ReceiptService receiptService;
+    private final OrderRepository orderRepository;
 
-    private final List<Order> orders = new ArrayList<>();
+    public OrderService(CommissionFactory commissionFactory,
+                        DiscountFactory discountFactory,
+                        ReceiptService receiptService,
+                        OrderRepository orderRepository){
+        this.commissionFactory = Objects.requireNonNull(commissionFactory);
+        this.discountFactory = Objects.requireNonNull(discountFactory);
+        this.orderRepository = Objects.requireNonNull(orderRepository);
+        this.receiptService = Objects.requireNonNull(receiptService);
+    }
 
     public double processOrder(Order order) {
 
         // --- валидация ---
+        validate(order);
+
+        // --- расчёт скидки по типу клиента ---
+        double discount = 0.0;
+        CustomerType customerType = order.getCustomerType();
+        discount = discountFactory.getDiscountStrategy(customerType).calculateDiscount(order.getAmount());
+
+        // --- расчёт комиссии по способу оплаты ---
+        double commission = 0.0;
+        PaymentType paymentType = order.getPaymentType();
+        commission = commissionFactory.getCommissionStrategy(paymentType).calculateCommission(order.getAmount());
+
+        // --- итоговая сумма ---
+        double finalAmount = order.getAmount() - discount + commission;
+
+        // --- формирование чека прямо тут ---
+        /*
+         * Чтобы сервис не нарушал принцип единственной ответственности,
+         * нужно перенести логику генерации чеков в другой сервис.
+         * Здесь представлен синхронный вариант, но я бы сделала его асинхронным
+         * с помощью Outbox pattern
+         */
+        receiptService.generateReceipt(order, discount, commission, finalAmount);
+
+        // --- "сохранение" заказа  ---
+        orderRepository.save(order);
+
+        return finalAmount;
+    }
+
+    private static void validate(Order order) {
         if (order.getAmount() <= 0) {
             throw new RuntimeException("Order amount must be positive");
         }
         if (order.getItems() == null || order.getItems().isEmpty()) {
             throw new RuntimeException("Order must contain at least one item");
         }
-
-        // --- расчёт скидки по типу клиента ---
-        double discount = 0.0;
-        String customerType = order.getCustomerType();
-        if (customerType.equals("REGULAR")) {
-            discount = 0.0;
-        } else if (customerType.equals("VIP")) {
-            discount = order.getAmount() * 0.05;
-        } else if (customerType.equals("PREMIUM")) {
-            discount = order.getAmount() * 0.10;
-        } else {
-            // TODO: добавить новый тип клиента — дописать ещё один else if
-            throw new RuntimeException("Unknown customer type: " + customerType);
-        }
-
-        // --- расчёт комиссии по способу оплаты ---
-        double commission = 0.0;
-        String paymentType = order.getPaymentType();
-        if (paymentType.equals("CARD")) {
-            commission = order.getAmount() * 0.02;
-        } else if (paymentType.equals("CASH")) {
-            commission = 0.0;
-        } else if (paymentType.equals("TRANSFER")) {
-            commission = order.getAmount() * 0.01;
-        } else {
-            // TODO: добавить новый способ оплаты — дописать ещё один else if
-            throw new RuntimeException("Unknown payment type: " + paymentType);
-        }
-
-        // --- итоговая сумма ---
-        double finalAmount = order.getAmount() - discount + commission;
-
-        // --- формирование чека прямо тут ---
-        System.out.println("=== RECEIPT ===");
-        System.out.println("Order ID: " + order.getId());
-        System.out.println("Items: " + order.getItems());
-        System.out.println("Base amount: " + order.getAmount());
-        System.out.println("Discount: -" + discount);
-        System.out.println("Commission: +" + commission);
-        System.out.println("Final amount: " + finalAmount);
-        System.out.println("================");
-
-        // --- "сохранение" заказа  ---
-        orders.add(order);
-
-        return finalAmount;
     }
 
-    public static void main(String[] args) {
-        OrderService service = new OrderService();
 
-        Order order1 = new Order("1", "VIP", "CARD", List.of("Laptop", "Mouse"), 1000.0);
-        Order order2 = new Order("2", "REGULAR", "CASH", List.of("Book"), 20.0);
+    public static void main(String[] args) {
+        List<CommissionStrategy> commissionStrategies = new ArrayList<>(
+                List.of(new CashCommissionStrategy(), new CardCommissionStrategy(), new TransferCommissionStrategy())
+        );
+
+        List<DiscountStrategy> discountStrategies = new ArrayList<>(
+                List.of(new RegularDiscountStrategy(), new VipDiscountStrategy(), new PremiumDiscountStrategy())
+        );
+
+        CommissionFactory commissionFactory = new CommissionFactory(commissionStrategies);
+        DiscountFactory discountFactory = new DiscountFactory(discountStrategies);
+        OrderRepository orderRepository = new SampleOrderRepository();
+        ReceiptService receiptService = new SampleReceiptService();
+
+        OrderService service = new OrderService(
+                commissionFactory,
+                discountFactory,
+                receiptService,
+                orderRepository);
+
+        Order order1 = new Order("1", CustomerType.VIP, PaymentType.CARD, List.of("Laptop", "Mouse"), 1000.0);
+        Order order2 = new Order("2", CustomerType.REGULAR, PaymentType.CASH, List.of("Book"), 20.0);
 
         System.out.println("Final amount 1: " + service.processOrder(order1));
         System.out.println("Final amount 2: " + service.processOrder(order2));

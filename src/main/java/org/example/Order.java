@@ -1,16 +1,19 @@
 package org.example;
 
+import org.example.comission.PaymentType;
+import org.example.discount.CustomerType;
+
 import java.util.List;
 
 public class Order {
 
     private String id;
-    private String customerType; // "REGULAR", "VIP", "PREMIUM"
-    private String paymentType;  // "CARD", "CASH", "TRANSFER"
+    private CustomerType customerType; // "REGULAR", "VIP", "PREMIUM"
+    private PaymentType paymentType;  // "CARD", "CASH", "TRANSFER"
     private List<String> items;
     private double amount;
 
-    public Order(String id, String customerType, String paymentType, List<String> items, double amount) {
+    public Order(String id, CustomerType customerType, PaymentType paymentType, List<String> items, double amount) {
         this.id = id;
         this.customerType = customerType;
         this.paymentType = paymentType;
@@ -19,8 +22,8 @@ public class Order {
     }
 
     public String getId() { return id; }
-    public String getCustomerType() { return customerType; }
-    public String getPaymentType() { return paymentType; }
+    public CustomerType getCustomerType() { return customerType; }
+    public PaymentType getPaymentType() { return paymentType; }
     public List<String> getItems() { return items; }
     public double getAmount() { return amount; }
 }
