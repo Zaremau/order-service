@@ -36,34 +36,41 @@ public class OrderService {
     private final DiscountFactory discountFactory;
     private final ReceiptService receiptService;
     private final OrderRepository orderRepository;
+    private final  OrderValidator orderValidator;
 
     public OrderService(CommissionFactory commissionFactory,
                         DiscountFactory discountFactory,
                         ReceiptService receiptService,
-                        OrderRepository orderRepository){
+                        OrderRepository orderRepository,
+                        OrderValidator orderValidator){
         this.commissionFactory = Objects.requireNonNull(commissionFactory);
         this.discountFactory = Objects.requireNonNull(discountFactory);
         this.orderRepository = Objects.requireNonNull(orderRepository);
         this.receiptService = Objects.requireNonNull(receiptService);
+        this.orderValidator = Objects.requireNonNull(orderValidator);
     }
 
     public double processOrder(Order order) {
 
         // --- валидация ---
-        validate(order);
+        orderValidator.validate(order);
 
         // --- расчёт скидки по типу клиента ---
-        double discount = 0.0;
-        CustomerType customerType = order.getCustomerType();
-        discount = discountFactory.getDiscountStrategy(customerType).calculateDiscount(order.getAmount());
+        double discount = discountFactory.getDiscountStrategy(order.getCustomerType()).calculateDiscount(order.getAmount());
 
         // --- расчёт комиссии по способу оплаты ---
-        double commission = 0.0;
-        PaymentType paymentType = order.getPaymentType();
-        commission = commissionFactory.getCommissionStrategy(paymentType).calculateCommission(order.getAmount());
+        double commission = commissionFactory.getCommissionStrategy(order.getPaymentType()).calculateCommission(order.getAmount());
 
         // --- итоговая сумма ---
         double finalAmount = order.getAmount() - discount + commission;
+
+        // --- "сохранение" заказа  ---
+        /*
+            Поменяла местами сохранение заказа и генерацию чека,
+            т.к. может произойти ситуация, когда чек уже сформирован,
+            а заказ сохранить не удалось
+        */
+        orderRepository.save(order);
 
         // --- формирование чека прямо тут ---
         /*
@@ -74,20 +81,10 @@ public class OrderService {
          */
         receiptService.generateReceipt(order, discount, commission, finalAmount);
 
-        // --- "сохранение" заказа  ---
-        orderRepository.save(order);
-
         return finalAmount;
     }
 
-    private static void validate(Order order) {
-        if (order.getAmount() <= 0) {
-            throw new RuntimeException("Order amount must be positive");
-        }
-        if (order.getItems() == null || order.getItems().isEmpty()) {
-            throw new RuntimeException("Order must contain at least one item");
-        }
-    }
+
 
 
     public static void main(String[] args) {
@@ -108,7 +105,8 @@ public class OrderService {
                 commissionFactory,
                 discountFactory,
                 receiptService,
-                orderRepository);
+                orderRepository,
+                new OrderValidator());
 
         Order order1 = new Order("1", CustomerType.VIP, PaymentType.CARD, List.of("Laptop", "Mouse"), 1000.0);
         Order order2 = new Order("2", CustomerType.REGULAR, PaymentType.CASH, List.of("Book"), 20.0);
@@ -116,5 +114,13 @@ public class OrderService {
         System.out.println("Final amount 1: " + service.processOrder(order1));
         System.out.println("Final amount 2: " + service.processOrder(order2));
     }
+
+    /*
+        SRP
+        OCP
+        LSP
+        ISP
+        DIP
+     */
 }
 
