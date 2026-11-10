@@ -1,9 +1,13 @@
 package org.example.discount;
 
+import java.math.BigDecimal;
+
 public class RegularDiscountStrategy implements DiscountStrategy{
+    private static final BigDecimal DISCOUNT_RATE = BigDecimal.ZERO;
+
     @Override
-    public double calculateDiscount(double amount) {
-        return amount * 0.0;
+    public BigDecimal calculateDiscount(BigDecimal amount) {
+        return amount.multiply(DISCOUNT_RATE);
     }
 
     @Override

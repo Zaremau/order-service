@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-public class DiscountFactory {
+public class DiscountFactory implements DiscountStrategyProvider {
     private final Map<CustomerType, DiscountStrategy> discountStrategyHashMap = new HashMap<>();
 
     public DiscountFactory(List<DiscountStrategy> strategies){
@@ -16,6 +16,7 @@ public class DiscountFactory {
         }
     }
 
+    @Override
     public DiscountStrategy getDiscountStrategy(CustomerType customerType){
         return Optional.ofNullable(discountStrategyHashMap.get(customerType))
                 .orElseThrow(() -> new IllegalArgumentException("Unknown customer type: " + customerType));
